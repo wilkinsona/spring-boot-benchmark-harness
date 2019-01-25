@@ -1,0 +1,83 @@
+#!/usr/bin/ruby
+
+require 'tmpdir'
+
+def fat_jar(baseline_jar, new_jar)
+  benchmark("Fat jar", "java -jar #{baseline_jar}", "java -jar #{new_jar}")
+end
+
+def main_method(baseline_jar, new_jar)
+  Dir.mktmpdir do |baseline_dir|
+    Dir.mktmpdir do |new_dir|
+      benchmark("Main method", get_main_method_command(baseline_jar, baseline_dir), get_main_method_command(new_jar, new_dir))
+    end
+  end
+end
+
+def get_main_method_command(jar, dir)
+  `unzip #{jar} -d #{dir}`
+  jars = Dir.glob(File.join(dir, "**", "*.jar")).join(":")
+  return "java -classpath #{dir}/BOOT-INF/classes:#{jars} #{find_main_class(dir)}"
+end
+
+def find_main_class(dir)
+  prefix = "Start-Class: "
+  File.readlines(File.join(dir, "META-INF", "MANIFEST.MF")).each do |line|
+    if line.start_with?(prefix) then
+      return line[prefix.length..-1].strip
+    end
+  end
+end
+
+def benchmark(title, baseline_command, new_command)
+  baseline_results = Array.new
+  new_results = Array.new
+  iterations = 10
+  puts "#{title}:"
+  puts
+  puts "|       | Baseline |  New  |"
+  puts "| ----- | -------: | ----: |"
+  for i in 1..iterations do
+    baseline_result = execute(baseline_command)
+    baseline_results << baseline_result
+    new_result = execute(new_command)
+    new_results << new_result
+    puts "|       | #{"   %0.3f" % baseline_result} | #{"%0.3f" % new_result} |"
+  end
+  puts "|  Mean |    #{"%0.3f" % mean(baseline_results)} | #{"%0.3f" % mean(new_results)} |"
+  puts "| Range |    #{"%0.3f" % range(baseline_results)} | #{"%0.3f" % range(new_results)} |"
+end
+
+def mean(results)
+  return results.reduce(:+).fdiv(results.size).round(3)
+end
+
+def range(results)
+  return (results.max - results.min).round(3)
+end
+
+def execute(command)
+  running_time_regex = %r{.*JVM\ running\ for\ ([0-9.]+).*}
+  sleep 2
+  output = `#{command}`
+  if matches = output.match(running_time_regex)
+	return matches[1].to_f
+  else
+    puts "Did not find JVM running time in $output"
+    exit 1
+  end
+end
+
+mode = ARGV[2]
+
+if mode then
+  if self.respond_to?(mode, true) then
+    self.send(mode, ARGV[0], ARGV[1])
+  else
+    puts "Unknown mode #{mode}"
+    exit 1
+  end
+else
+  fat_jar(ARGV[0], ARGV[1])
+  main_method(ARGV[0], ARGV[1])
+end
