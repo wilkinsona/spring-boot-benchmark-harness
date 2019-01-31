@@ -63,7 +63,7 @@ def execute(command)
   if matches = output.match(running_time_regex)
 	return matches[1].to_f
   else
-    puts "Did not find JVM running time in $output"
+    puts "Did not find JVM running time in #{output}"
     exit 1
   end
 end
